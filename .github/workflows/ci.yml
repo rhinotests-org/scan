@@ -1,0 +1,25 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # No third-party actions anywhere in this repository, not even checkout.
+      - name: Get the code
+        env:
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          git init -q .
+          git fetch -q --depth 1 "https://github.com/$REPO" "$SHA"
+          git checkout -q FETCH_HEAD
+      - name: Lint
+        run: shellcheck scan.sh tests/run.sh
+      - name: Test
+        run: bash tests/run.sh

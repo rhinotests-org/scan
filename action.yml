@@ -1,0 +1,68 @@
+name: RhinoTests scan
+description: Run a RhinoTests security scan of your web app and fail the job when findings are open.
+author: RhinoTests
+branding:
+  icon: shield
+  color: green
+
+inputs:
+  domain:
+    description: The verified domain to scan, without https:// (for example app.example.com).
+    required: true
+  token:
+    description: A RhinoTests API token (Account → API tokens). Pass it from a secret, never in plain text.
+    required: true
+  profile:
+    description: Scan type — quick, standard or full. Each one has a fixed price in credits.
+    required: false
+    default: quick
+  fail-on:
+    description: Fail the job when a finding of this severity or higher is open — none, low, medium or high.
+    required: false
+    default: high
+  timeout-minutes:
+    description: How long to wait for the scan before failing the job. The scan itself keeps running.
+    required: false
+    default: "75"
+
+outputs:
+  scan-id:
+    description: Identifier of the scan.
+    value: ${{ steps.scan.outputs.scan-id }}
+  status:
+    description: Final status of the scan — done or failed.
+    value: ${{ steps.scan.outputs.status }}
+  grade:
+    description: Security grade of the domain, A to F.
+    value: ${{ steps.scan.outputs.grade }}
+  open:
+    description: Number of open findings.
+    value: ${{ steps.scan.outputs.open }}
+  high:
+    description: Open findings of high severity.
+    value: ${{ steps.scan.outputs.high }}
+  medium:
+    description: Open findings of medium severity.
+    value: ${{ steps.scan.outputs.medium }}
+  low:
+    description: Open findings of low severity.
+    value: ${{ steps.scan.outputs.low }}
+  report-url:
+    description: Link to the report in RhinoTests.
+    value: ${{ steps.scan.outputs.report-url }}
+
+runs:
+  using: composite
+  steps:
+    - id: scan
+      shell: bash
+      # Inputs travel as environment variables, never interpolated into the script.
+      env:
+        RT_DOMAIN: ${{ inputs.domain }}
+        RT_TOKEN: ${{ inputs.token }}
+        RT_PROFILE: ${{ inputs.profile }}
+        RT_FAIL_ON: ${{ inputs.fail-on }}
+        RT_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+        # Fixed here on purpose: the token is only ever sent to RhinoTests.
+        RT_API_URL: https://app.rhinotests.com/ci/v1
+      run: bash "$GITHUB_ACTION_PATH/scan.sh"

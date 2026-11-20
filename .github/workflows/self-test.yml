@@ -1,0 +1,51 @@
+# Runs the action from this repository against production, by hand. It spends real credits of the
+# organization that owns RHINOTESTS_TOKEN.
+name: self-test
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: Verified domain to scan
+        required: true
+        default: rhinotests.com
+      profile:
+        description: quick, standard or full
+        required: true
+        default: quick
+      fail-on:
+        description: none, low, medium or high
+        required: true
+        default: high
+permissions:
+  contents: read
+concurrency:
+  group: self-test-${{ inputs.domain }}
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Get the code
+        env:
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          git init -q .
+          git fetch -q --depth 1 "https://github.com/$REPO" "$SHA"
+          git checkout -q FETCH_HEAD
+      - name: RhinoTests
+        id: rhino
+        uses: ./
+        with:
+          domain: ${{ inputs.domain }}
+          token: ${{ secrets.RHINOTESTS_TOKEN }}
+          profile: ${{ inputs.profile }}
+          fail-on: ${{ inputs.fail-on }}
+      - name: Show the outputs
+        if: always()
+        env:
+          GRADE: ${{ steps.rhino.outputs.grade }}
+          OPEN: ${{ steps.rhino.outputs.open }}
+          STATUS: ${{ steps.rhino.outputs.status }}
+          REPORT: ${{ steps.rhino.outputs.report-url }}
+        run: echo "status=$STATUS grade=$GRADE open=$OPEN report=$REPORT"
