@@ -25,7 +25,8 @@ Run it after your deploy step, against the environment you just deployed.
 ### Before the first run
 
 1. In RhinoTests, add and verify the domain (**Domains**).
-2. Create an API token in **Account → API tokens**. It is shown once.
+2. Create an API token on the **CI/CD** page (https://app.rhinotests.com/cicd). It is shown once;
+   that page also builds the workflow step for you.
 3. In your repository, save it as a secret named `RHINOTESTS_TOKEN`
    (**Settings → Secrets and variables → Actions**).
 
@@ -98,7 +99,8 @@ Corre un escaneo de seguridad de RhinoTests sobre tu app web desde GitHub Action
 pipeline falle si quedan hallazgos abiertos.
 
 1. En RhinoTests, agrega y verifica el dominio (**Dominios**).
-2. Crea un token en **Cuenta → Tokens de API**. Se muestra una sola vez.
+2. Crea un token en la página **CI/CD** (https://app.rhinotests.com/cicd). Se muestra una sola vez;
+   esa página también te arma el paso del workflow.
 3. En tu repositorio, guárdalo como secreto con el nombre `RHINOTESTS_TOKEN`
    (**Settings → Secrets and variables → Actions**).
 4. Agrega el paso después de tu deploy:
