@@ -10,7 +10,7 @@ inputs:
     description: The verified domain to scan, without https:// (for example app.example.com).
     required: true
   token:
-    description: A RhinoTests API token (Account → API tokens). Pass it from a secret, never in plain text.
+    description: A RhinoTests API token (CI/CD page of the app). Pass it from a secret, never in plain text.
     required: true
   profile:
     description: Scan type — quick, standard or full. Each one has a fixed price in credits.
