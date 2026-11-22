@@ -38,12 +38,15 @@ verified domains and read their result.
 | Input             | Default | Description                                                                                        |
 | ----------------- | ------- | -------------------------------------------------------------------------------------------------- |
 | `domain`          | —       | The verified domain to scan, without `https://`.                                                   |
+| `path`            | empty   | Scan only the app under this path, like `/tienda`. It gets its own grade, report and history.      |
+| `shared-paths`    | empty   | Up to 5 paths that app also uses, separated by commas, like `/api`. Only with `path`.              |
 | `token`           | —       | Your API token. Always pass it from a secret.                                                      |
 | `profile`         | `quick` | `quick`, `standard` or `full`. Each has a fixed price in credits, the same as in the app.          |
 | `fail-on`         | `high`  | Fail the job when a finding of this severity or higher is open: `none`, `low`, `medium` or `high`. |
 | `timeout-minutes` | `75`    | How long to wait before failing the job. The scan itself keeps running.                            |
 
-`fail-on` looks at every open finding of the domain after the scan, new or old. Use `none` to
+`fail-on` looks at every open finding of the domain (or of the path, when you set one, plus what
+belongs to the whole domain: TLS, DNS and files at the root) after the scan, new or old. Use `none` to
 report without blocking.
 
 ## Outputs
@@ -80,7 +83,7 @@ The grade, the counts and the link are also written to the job summary.
 - **Exit codes.** `1` when findings at or above `fail-on` are open, `2` when the scan could not run
   or failed.
 - **Requirements.** `bash`, `curl` and `jq` on the runner (GitHub-hosted runners have them).
-- **What it sends.** The domain, the profile and your token, over HTTPS, only to
+- **What it sends.** The domain, the paths, the profile and your token, over HTTPS, only to
   `app.rhinotests.com`. The action is a single shell script, [`scan.sh`](scan.sh), with no
   third-party dependencies: read it before you trust it.
 
@@ -112,6 +115,9 @@ pipeline falle si quedan hallazgos abiertos.
     domain: app.ejemplo.com
     token: ${{ secrets.RHINOTESTS_TOKEN }}
 ```
+
+Si tu dominio tiene varias apps por ruta, agrega `path: /tienda` para escanear solo esa app: tiene su
+propia nota, reporte e historial. Con `shared-paths: /api` incluyes rutas que también usa (hasta 5).
 
 `profile` acepta `quick` (rápido, por defecto), `standard` (estándar) o `full` (completo), con el
 mismo precio en créditos que en la app. `fail-on` (por defecto `high`) hace fallar el pipeline si

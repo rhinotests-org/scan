@@ -9,6 +9,14 @@ inputs:
   domain:
     description: The verified domain to scan, without https:// (for example app.example.com).
     required: true
+  path:
+    description: Scan only the app under this path of the domain (for example /tienda). Empty scans the whole domain.
+    required: false
+    default: ""
+  shared-paths:
+    description: Up to 5 paths that app also uses, separated by commas (for example /api). Only with path.
+    required: false
+    default: ""
   token:
     description: A RhinoTests API token (CI/CD page of the app). Pass it from a secret, never in plain text.
     required: true
@@ -33,7 +41,7 @@ outputs:
     description: Final status of the scan — done or failed.
     value: ${{ steps.scan.outputs.status }}
   grade:
-    description: Security grade of the domain, A to F.
+    description: Security grade of the domain, or of the path when one is set, A to F.
     value: ${{ steps.scan.outputs.grade }}
   open:
     description: Number of open findings.
@@ -59,6 +67,8 @@ runs:
       # Inputs travel as environment variables, never interpolated into the script.
       env:
         RT_DOMAIN: ${{ inputs.domain }}
+        RT_PATH: ${{ inputs.path }}
+        RT_SHARED_PATHS: ${{ inputs.shared-paths }}
         RT_TOKEN: ${{ inputs.token }}
         RT_PROFILE: ${{ inputs.profile }}
         RT_FAIL_ON: ${{ inputs.fail-on }}
