@@ -31,6 +31,9 @@ FINAL = {
     "medium": result(0, 1, 2, "C"),
     "high": result(1, 1, 0, "D"),
     "flaky": result(0, 0, 0, "A"),
+    "shared": result(0, 0, 0, "A"),
+    "root": result(0, 0, 0, "A"),
+    "oldapi": result(0, 0, 0, "A"),
     "slow": None,
     "failed": {
         "status": "failed",
@@ -48,6 +51,7 @@ REFUSALS = {
     "unverified": (409, {"code": "domain_unverified", "message": "Domain is not verified"}),
     "busy": (409, {"code": "scan_in_progress", "message": "A scan is running"}),
     "unknown": (422, {"code": "invalid_scan", "message": "Unknown domain or profile"}),
+    "badpath": (422, {"code": "invalid_path", "message": "Invalid path"}),
     "down": (503, {"message": "Service Unavailable"}),
 }
 
@@ -84,9 +88,15 @@ class Handler(BaseHTTPRequestHandler):
         # The firewall in front of the API answers 403 without our error format, once.
         if name == "flaky" and self.count("flaky-post") == 1:
             return self.send(403, {"message": "Forbidden"})
+        if name == "shared" and sent.get("sharedPaths") != ["/api", "/static"]:
+            return self.send(500, {"message": "shared paths were not sent"})
+        if name == "root" and ("path" in sent or "sharedPaths" in sent):
+            return self.send(500, {"message": "a whole-domain scan sent a path"})
         self.send(
             201,
             {
+                # An API from before paths ignores the field.
+                "path": None if name == "oldapi" else sent.get("path"),
                 "id": f"scan-{name}",
                 "status": "queued",
                 "domain": sent.get("domain"),

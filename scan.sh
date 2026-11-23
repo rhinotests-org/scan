@@ -8,6 +8,8 @@ set -euo pipefail
 
 API_URL="${RT_API_URL:-https://app.rhinotests.com/ci/v1}"
 DOMAIN="${RT_DOMAIN:-}"
+SCAN_PATH="${RT_PATH:-}"
+SHARED_PATHS="${RT_SHARED_PATHS:-}"
 TOKEN="${RT_TOKEN:-}"
 PROFILE="${RT_PROFILE:-quick}"
 FAIL_ON="${RT_FAIL_ON:-high}"
@@ -30,6 +32,30 @@ command -v jq >/dev/null || fail "jq is required on the runner."
 case "$PROFILE" in quick | standard | full) ;; *) fail "profile must be quick, standard or full (got '$PROFILE')." ;; esac
 case "$FAIL_ON" in none | low | medium | high) ;; *) fail "fail-on must be none, low, medium or high (got '$FAIL_ON')." ;; esac
 case "$TIMEOUT_MINUTES" in '' | *[!0-9]*) fail "timeout-minutes must be a whole number (got '$TIMEOUT_MINUTES')." ;; esac
+
+# Paths are checked here as well as in the API: they are printed in the log, where a line break or
+# "::" would be read as a workflow command.
+valid_path() {
+  local LC_ALL=C re='^/[A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+){0,7}/?$'
+  [ "${#1}" -le 200 ] && [[ "$1" =~ $re ]] && [[ ! "$1/" =~ /\.\.?/ ]]
+}
+[ "$SCAN_PATH" != / ] || SCAN_PATH=""
+[ -z "$SCAN_PATH" ] || valid_path "$SCAN_PATH" || fail "The 'path' input must look like /tienda: no query, fragment, spaces, '%' or '..'."
+SCAN_PATH="${SCAN_PATH%/}"
+shared_json='[]'
+if [ -n "${SHARED_PATHS//[[:space:],]/}" ]; then
+  [ -n "$SCAN_PATH" ] || fail "'shared-paths' only works together with 'path'."
+  IFS=', ' read -r -d '' -a shared < <(printf '%s\0' "${SHARED_PATHS//$'\n'/,}") || true
+  list=()
+  for item in "${shared[@]}"; do
+    [ -n "$item" ] || continue
+    valid_path "$item" || fail "Every entry of 'shared-paths' must look like /api."
+    list+=("${item%/}")
+  done
+  [ "${#list[@]}" -le 5 ] || fail "'shared-paths' takes at most 5 paths."
+  shared_json=$(printf '%s\n' "${list[@]}" | jq -R . | jq -sc .)
+fi
+SITE="$DOMAIN$SCAN_PATH"
 
 # The token never appears in the log, even if a later command echoes it.
 echo "::add-mask::$TOKEN"
@@ -75,7 +101,7 @@ explain() {
   code=$(field .code)
   message=$(field .message)
   case "$status:$code" in
-    401:*) echo "The API token is missing, revoked or expired. Create a new one in RhinoTests (Account → API tokens) and update the RHINOTESTS_TOKEN secret." ;;
+    401:*) echo "The API token is missing, revoked or expired. Create a new one in RhinoTests (CI/CD page) and update the RHINOTESTS_TOKEN secret." ;;
     402:*) echo "Your organization does not have enough credits for a $PROFILE scan." ;;
     403:plan_required) echo "Your plan does not include CI scans. They are part of the Equipo and Auditoría plans." ;;
     403:*) echo "The request was blocked before reaching RhinoTests (HTTP 403). Try again later; if it keeps happening, contact support." ;;
@@ -83,6 +109,7 @@ explain() {
     409:domain_unverified) echo "The domain $DOMAIN is not verified yet. Verify it in RhinoTests (Domains) first." ;;
     409:scan_in_progress) echo "A scan of $DOMAIN is already running. Wait for it to finish, or avoid running two pipelines for the same domain at once." ;;
     422:profile_not_allowed) echo "The $PROFILE profile is not allowed for $DOMAIN (the full profile needs active tests authorized for the domain)." ;;
+    422:invalid_path) echo "RhinoTests did not accept the path. Use one like /tienda, and at most 5 shared paths." ;;
     422:*) echo "RhinoTests does not know the domain $DOMAIN in your organization, or the request is invalid${message:+ ($message)}." ;;
     429:*) echo "Too many requests with this token. Try again in a minute." ;;
     000:*) echo "RhinoTests could not be reached: $(tr -d '\n' <"$work/error" 2>/dev/null)" ;;
@@ -93,8 +120,11 @@ explain() {
 output() { [ -z "${GITHUB_OUTPUT:-}" ] || echo "$1=$2" >>"$GITHUB_OUTPUT"; }
 summary() { [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "$1" >>"$GITHUB_STEP_SUMMARY"; }
 
-echo "Starting a $PROFILE scan of $DOMAIN."
-request POST /scans "$(jq -nc --arg d "$DOMAIN" --arg p "$PROFILE" '{domain: $d, profile: $p}')"
+echo "Starting a $PROFILE scan of $SITE."
+request POST /scans "$(jq -nc --arg d "$DOMAIN" --arg p "$PROFILE" --arg path "$SCAN_PATH" --argjson shared "$shared_json" \
+  '{domain: $d, profile: $p}
+   + (if $path != "" then {path: $path} else {} end)
+   + (if ($shared | length) > 0 then {sharedPaths: $shared} else {} end)')"
 [ "$status" = 201 ] || fail "$(explain)"
 
 scan_id=$(field .id)
@@ -103,6 +133,13 @@ report_url=$(field .reportUrl)
 output scan-id "$scan_id"
 output report-url "$report_url"
 echo "Scan $scan_id started. Report: $report_url"
+# An API that does not know paths would scan the whole domain and could pass for the wrong reason.
+# The API may answer with the spelling of the path's first scan, so case does not count.
+if [ -n "$SCAN_PATH" ]; then
+  got=$(field .path | tr '[:upper:]' '[:lower:]')
+  [ "$got" = "$(tr '[:upper:]' '[:lower:]' <<<"$SCAN_PATH")" ] ||
+    fail "RhinoTests did not limit the scan to $SCAN_PATH, so its result would not be about that app. Report: $report_url"
+fi
 
 deadline=$(($(date +%s) + TIMEOUT_MINUTES * 60))
 last=""
@@ -115,7 +152,7 @@ while :; do
   [ "$now" = "$last" ] || echo "$now"
   last=$now
   if [ "$(date +%s)" -ge "$deadline" ]; then
-    summary "### RhinoTests · $DOMAIN"
+    summary "### RhinoTests · $SITE"
     summary "The scan did not finish in $TIMEOUT_MINUTES minutes. It keeps running: [open the report]($report_url)."
     fail "The scan did not finish in $TIMEOUT_MINUTES minutes. It keeps running in RhinoTests: $report_url"
   fi
@@ -126,7 +163,7 @@ output status "$scan_status"
 if [ "$scan_status" = failed ]; then
   reason="$(field .failure.message)"
   code="$(field .failure.code)"
-  summary "### RhinoTests · $DOMAIN"
+  summary "### RhinoTests · $SITE"
   summary "The scan failed${code:+ (\`$code\`)}${reason:+: $reason}. [Open it in RhinoTests]($report_url)."
   fail "The scan failed${code:+ ($code)}${reason:+: $reason}"
 fi
@@ -151,7 +188,7 @@ case "$FAIL_ON" in
 esac
 
 echo "Grade $grade · $open open findings (high $high, medium $medium, low $low)."
-summary "### RhinoTests · $DOMAIN"
+summary "### RhinoTests · $SITE"
 summary ""
 summary "| Grade | Open | High | Medium | Low |"
 summary "| :-: | :-: | :-: | :-: | :-: |"

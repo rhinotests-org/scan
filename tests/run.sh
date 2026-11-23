@@ -60,6 +60,23 @@ check clean 2 "timeout-minutes must be" RT_TIMEOUT_MINUTES=soon
 check clean 2 "'domain' input is empty" RT_DOMAIN=
 check clean 2 "'token' input is empty" RT_TOKEN=
 
+check clean 0 "RhinoTests · app.example.com/tienda" RT_PATH=/tienda/
+check shared 0 "Passed" RT_PATH=/tienda "RT_SHARED_PATHS=/api/, /static"
+check shared 0 "Passed" RT_PATH=/tienda $'RT_SHARED_PATHS=/api\n/static\n'
+check root 0 "Passed"
+check root 0 "Passed" RT_PATH=/
+check oldapi 2 "did not limit the scan to /tienda" RT_PATH=/tienda
+check badpath 2 "did not accept the path" RT_PATH=/tienda
+check clean 2 "'path' input must look like" RT_PATH=tienda
+check clean 2 "'path' input must look like" RT_PATH=/a/../b
+check clean 2 "'path' input must look like" RT_PATH=/a/..
+check clean 2 "'path' input must look like" "RT_PATH=/a?x=1"
+check clean 2 "'path' input must look like" RT_PATH=/%2e%2e
+check clean 2 "'path' input must look like" $'RT_PATH=/a\n::stop-commands::x'
+check clean 2 "only works together" RT_SHARED_PATHS=/api
+check clean 2 "must look like /api" RT_PATH=/tienda RT_SHARED_PATHS=api
+check clean 2 "at most 5" RT_PATH=/tienda RT_SHARED_PATHS=/a,/b,/c,/d,/e,/f
+
 # The token must never reach the log (the add-mask line is the one allowed mention).
 env RT_API_URL="http://127.0.0.1:$PORT" RT_DOMAIN=app.example.com RT_TOKEN=rt_clean RT_POLL_SECONDS=0 \
   bash scan.sh 2>&1 | grep -v '^::add-mask::' | grep -q 'rt_clean' && {
